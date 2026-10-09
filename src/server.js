@@ -16,7 +16,7 @@ const require = createRequire(import.meta.url);
 const baileys = require('baileys');
 const makeWASocket = baileys.makeWASocket ?? baileys.default;
 const {
-  DisconnectReason, fetchLatestBaileysVersion, fetchLatestWaWebVersion, Browsers, BufferJSON, initAuthCreds, proto,
+  DisconnectReason, fetchLatestWaWebVersion, Browsers, BufferJSON, initAuthCreds, proto,
   makeCacheableSignalKeyStore,
 } = baileys;
 
@@ -236,6 +236,43 @@ let pairingCode = null;
 let linkedAs = null;
 let restartTimer = null;
 let waVersionLogged = false;
+
+// WhatsApp hangs up right after registration on clients reporting an outdated web version, so never send
+// anything older than this known-good one (see WhiskeySockets/Baileys#2777). WA_VERSION overrides it all.
+const MIN_WA_VERSION = [2, 3000, 1045716975];
+const newer = (a, b) => (a[0] - b[0] || a[1] - b[1] || a[2] - b[2]) >= 0 ? a : b;
+let lastLiveVersion = null; // the lookup is flaky, so remember the last version it returned
+
+async function pickWaVersion() {
+  const override = process.env.WA_VERSION?.split('.').map(Number);
+  let version;
+  let source;
+  if (override?.length === 3 && override.every(Number.isFinite)) {
+    version = override;
+    source = 'WA_VERSION';
+  } else {
+    let problem;
+    try {
+      const r = await fetchLatestWaWebVersion();
+      if (r.isLatest) { version = lastLiveVersion = r.version; source = 'web.whatsapp.com'; }
+      else problem = r.error?.message || JSON.stringify(r.error);
+    } catch (err) {
+      problem = err.message;
+    }
+    if (!version && lastLiveVersion) {
+      version = lastLiveVersion;
+      source = 'last live lookup';
+    }
+    if (!version) {
+      version = MIN_WA_VERSION;
+      source = `known-good fallback (live lookup failed: ${problem})`;
+    }
+    version = newer(version, MIN_WA_VERSION);
+  }
+  if (!waVersionLogged) { logger.warn(`Using WhatsApp Web version ${version.join('.')} from ${source}`); waVersionLogged = true; }
+  return version;
+}
+
 let linkReady = false; // current socket has reached the QR stage, so it can hand out a pairing code
 
 // Wait until the current socket can accept a pairing-code request (it reconnects every so often while unlinked).
@@ -267,14 +304,7 @@ async function startWhatsApp() {
     markOnlineOnConnect: false,          // don't change your "online" status
     printQRInTerminal: false,
   };
-  // WhatsApp hangs up on clients reporting an outdated web version, so prefer the live one from web.whatsapp.com.
-  for (const fetchVersion of [fetchLatestWaWebVersion, fetchLatestBaileysVersion]) {
-    try {
-      const { version, isLatest } = await fetchVersion();
-      if (version && isLatest !== false) { config.version = version; break; }
-    } catch { /* try the next source, then fall back to the library default */ }
-  }
-  if (!waVersionLogged) { logger.warn(`Using WhatsApp Web version ${(config.version || []).join('.') || 'library default'}`); waVersionLogged = true; }
+  config.version = await pickWaVersion();
 
   linkReady = false;
   sock = makeWASocket(config);
