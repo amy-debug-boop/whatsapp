@@ -235,6 +235,17 @@ let latestQR = null;
 let pairingCode = null;
 let linkedAs = null;
 let restartTimer = null;
+let linkReady = false; // current socket has reached the QR stage, so it can hand out a pairing code
+
+// Wait until the current socket can accept a pairing-code request (it reconnects every so often while unlinked).
+async function waitForLinkReady(skip = null, timeoutMs = 20000) {
+  const until = Date.now() + timeoutMs;
+  while (Date.now() < until) {
+    if (sock && sock !== skip && linkReady) return sock;
+    await new Promise((r) => setTimeout(r, 250));
+  }
+  return null;
+}
 
 async function startWhatsApp() {
   const { state, saveCreds } = await usePostgresAuthState();
@@ -251,12 +262,14 @@ async function startWhatsApp() {
     if (version) config.version = version;
   } catch { /* fall back to the library default */ }
 
+  linkReady = false;
   sock = makeWASocket(config);
   sock.ev.on('creds.update', safe('creds', saveCreds));
 
   sock.ev.on('connection.update', async (u) => {
     if (u.qr) {
       latestQR = u.qr;
+      linkReady = true;
       status = 'waiting_for_link';
     }
     if (u.connection === 'open') {
@@ -267,6 +280,7 @@ async function startWhatsApp() {
       logger.warn(`WhatsApp connected as ${linkedAs}`);
     }
     if (u.connection === 'close') {
+      linkReady = false;
       const code = u.lastDisconnect?.error?.output?.statusCode;
       pairingCode = null;
       if (code === DisconnectReason.loggedOut) {
@@ -545,15 +559,24 @@ app.post('/link/:secret/pair', async (req, res) => {
   if (!secretOk(req.params.secret)) return res.status(404).end();
   const phone = String(req.body?.phone || '').replace(/\D/g, '');
   if (phone.length < 8) return res.status(400).json({ error: 'Enter the full number with country code.' });
-  if (!sock || sock.authState?.creds?.registered) return res.status(409).json({ error: 'Already linked or not ready yet.' });
-  try {
-    const code = await sock.requestPairingCode(phone);
-    pairingCode = code?.match(/.{1,4}/g)?.join('-') || code;
-    res.json({ pairingCode });
-  } catch (err) {
-    logger.error(err);
-    res.status(500).json({ error: `Couldn't get a code: ${String(err.message || err)}` });
+  if (status === 'connected' || sock?.authState?.creds?.registered) return res.status(409).json({ error: 'Already linked.' });
+  let lastErr;
+  let failed = null;
+  // The socket can close between becoming ready and our request; try once more on the next socket.
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const s = await waitForLinkReady(failed);
+    if (!s) break;
+    try {
+      const code = await s.requestPairingCode(phone);
+      pairingCode = code?.match(/.{1,4}/g)?.join('-') || code;
+      return res.json({ pairingCode });
+    } catch (err) {
+      lastErr = err;
+      logger.error(err);
+      failed = s;
+    }
   }
+  res.status(503).json({ error: `Couldn't get a code${lastErr ? `: ${String(lastErr.message || lastErr)}` : ''}. Wait a few seconds and try again.` });
 });
 
 initDb()
