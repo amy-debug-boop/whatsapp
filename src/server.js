@@ -300,7 +300,9 @@ async function startWhatsApp() {
   const config = {
     auth: { creds: state.creds, keys: makeCacheableSignalKeyStore(state.keys, logger) },
     logger,
-    browser: Browsers.macOS('Desktop'), // desktop identity gets the fullest history sync
+    // WhatsApp cuts off clients that claim to be the Mac/Windows desktop app (428 before any QR, see
+    // WhiskeySockets/Baileys#2677), so present as Chrome. History sync is shorter than the desktop app's.
+    browser: Browsers.ubuntu('Chrome'),
     syncFullHistory: true,
     markOnlineOnConnect: false,          // don't change your "online" status
     printQRInTerminal: false,
