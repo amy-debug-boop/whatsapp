@@ -1,0 +1,23 @@
+services:
+  - type: web
+    name: whatsapp-reader-mcp
+    runtime: node
+    plan: starter            # a persistent disk needs a paid plan
+    region: ohio
+    buildCommand: npm ci
+    startCommand: npm start
+    healthCheckPath: /health
+    numInstances: 1          # WhatsApp allows one live session per linked device
+    disk:
+      name: whatsapp-data
+      mountPath: /var/data
+      sizeGB: 1
+    envVars:
+      - key: NODE_VERSION
+        value: "20"
+      - key: DATA_DIR
+        value: /var/data
+      - key: TIMEZONE
+        value: America/Tegucigalpa
+      - key: AUTH_SECRET
+        generateValue: true
