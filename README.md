@@ -49,7 +49,7 @@ Then ask something like: *"Check my WhatsApp chat with Dani Eldas for tours in O
 - **Your phone** needs to come online at least every couple of weeks, or WhatsApp unlinks the device.
 - **Times** are shown in Honduras time (`TIMEZONE` in Render's Environment tab, using names like `America/Chicago`).
 - **To stop:** unlink it in WhatsApp → Linked devices, delete the service in Render, and drop the `whatsapp` schema in Supabase.
-- **If WhatsApp updates and the link stops working:** update the `@whiskeysockets/baileys` version in `package.json` and redeploy.
+- **If WhatsApp updates and the link stops working:** update the `baileys` version in `package.json` and redeploy.
 
 ## Tools Claude gets
 | Tool | What it does |
