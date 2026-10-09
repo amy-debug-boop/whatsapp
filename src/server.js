@@ -16,7 +16,7 @@ const require = createRequire(import.meta.url);
 const baileys = require('baileys');
 const makeWASocket = baileys.makeWASocket ?? baileys.default;
 const {
-  DisconnectReason, fetchLatestBaileysVersion, Browsers, BufferJSON, initAuthCreds, proto,
+  DisconnectReason, fetchLatestBaileysVersion, fetchLatestWaWebVersion, Browsers, BufferJSON, initAuthCreds, proto,
   makeCacheableSignalKeyStore,
 } = baileys;
 
@@ -235,6 +235,7 @@ let latestQR = null;
 let pairingCode = null;
 let linkedAs = null;
 let restartTimer = null;
+let waVersionLogged = false;
 let linkReady = false; // current socket has reached the QR stage, so it can hand out a pairing code
 
 // Wait until the current socket can accept a pairing-code request (it reconnects every so often while unlinked).
@@ -266,10 +267,14 @@ async function startWhatsApp() {
     markOnlineOnConnect: false,          // don't change your "online" status
     printQRInTerminal: false,
   };
-  try {
-    const { version } = await fetchLatestBaileysVersion();
-    if (version) config.version = version;
-  } catch { /* fall back to the library default */ }
+  // WhatsApp hangs up on clients reporting an outdated web version, so prefer the live one from web.whatsapp.com.
+  for (const fetchVersion of [fetchLatestWaWebVersion, fetchLatestBaileysVersion]) {
+    try {
+      const { version, isLatest } = await fetchVersion();
+      if (version && isLatest !== false) { config.version = version; break; }
+    } catch { /* try the next source, then fall back to the library default */ }
+  }
+  if (!waVersionLogged) { logger.warn(`Using WhatsApp Web version ${(config.version || []).join('.') || 'library default'}`); waVersionLogged = true; }
 
   linkReady = false;
   sock = makeWASocket(config);
