@@ -13,7 +13,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 
 const require = createRequire(import.meta.url);
-const baileys = require('@whiskeysockets/baileys');
+const baileys = require('baileys');
 const makeWASocket = baileys.makeWASocket ?? baileys.default;
 const {
   DisconnectReason, fetchLatestBaileysVersion, Browsers, BufferJSON, initAuthCreds, proto,
