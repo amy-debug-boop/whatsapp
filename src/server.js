@@ -235,6 +235,7 @@ let latestQR = null;
 let pairingCode = null;
 let linkedAs = null;
 let restartTimer = null;
+let failedConnects = 0; // back off so a rejected connection doesn't hammer WhatsApp every few seconds
 let waVersionLogged = false;
 
 // WhatsApp hangs up right after registration on clients reporting an outdated web version, so never send
@@ -314,10 +315,12 @@ async function startWhatsApp() {
     if (u.qr) {
       latestQR = u.qr;
       linkReady = true;
+      failedConnects = 0;
       status = 'waiting_for_link';
     }
     if (u.connection === 'open') {
       status = 'connected';
+      failedConnects = 0;
       latestQR = null;
       pairingCode = null;
       linkedAs = sock.user?.id || null;
@@ -335,8 +338,11 @@ async function startWhatsApp() {
       } else {
         status = 'reconnecting';
       }
+      // 3s, 6s, 12s ... up to 5 minutes while WhatsApp keeps refusing us; reset once it offers a QR or connects.
+      const delay = Math.min(3000 * 2 ** failedConnects, 5 * 60 * 1000);
+      failedConnects++;
       clearTimeout(restartTimer);
-      restartTimer = setTimeout(() => startWhatsApp().catch((e) => logger.error(e)), 3000);
+      restartTimer = setTimeout(() => startWhatsApp().catch((e) => logger.error(e)), delay);
     }
   });
 
