@@ -1,7 +1,7 @@
 {
   "name": "whatsapp-reader-mcp",
   "version": "1.0.0",
-  "description": "Read-only MCP connector that lets Claude search your own WhatsApp chats",
+  "description": "Read-only MCP connector that lets Claude search your own WhatsApp chats (Supabase storage)",
   "type": "module",
   "main": "src/server.js",
   "scripts": {
@@ -13,10 +13,10 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.30.0",
     "@whiskeysockets/baileys": "6.7.24",
-    "better-sqlite3": "13.0.3",
     "express": "5.2.1",
     "pino": "10.3.1",
     "qrcode": "1.5.4",
-    "zod": "4.6.5"
+    "zod": "4.6.5",
+    "pg": "8.23.0"
   }
 }

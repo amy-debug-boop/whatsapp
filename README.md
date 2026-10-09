@@ -4,9 +4,13 @@ A small server that links to your own WhatsApp the same way WhatsApp Web does. I
 
 > **Heads up:** this uses an unofficial WhatsApp library. It's against WhatsApp's terms, and WhatsApp can ban numbers that use tools like this. Bans are uncommon for light, read-only use, but the risk is real. You can unlink it anytime from WhatsApp → Settings → Linked devices.
 
+## Where things are stored
+
+Everything lives in your **Supabase** database, in a private schema called `whatsapp` (tables `messages`, `names`, `auth`). The `auth` table holds your WhatsApp login, so treat the database like a password. The schema isn't exposed through Supabase's public API, and nothing is stored on Render.
+
 ## What it costs
 
-Render's **Starter** plan plus a 1 GB disk (last I knew, about $7 a month plus a few cents for the disk; check Render's pricing page for current rates). The free plan won't work: it has no disk, so the WhatsApp login and saved messages would be wiped on every restart.
+Supabase's free tier is enough. Render's free plan works, but it sleeps after 15 minutes without traffic: WhatsApp disconnects until the next request wakes it (about a minute), then catches up on messages. Render's paid Starter plan stays awake.
 
 ## Setup (about 15 minutes, easiest on a computer)
 
@@ -14,14 +18,17 @@ Render's **Starter** plan plus a 1 GB disk (last I knew, about $7 a month plus a
 1. Sign in at github.com and create a new **private** repository (e.g. `whatsapp-reader-mcp`).
 2. Click **uploading an existing file** and drag in everything from this folder, keeping the `src` folder. Commit.
 
-### 2. Deploy on Render
+### 2. Get your Supabase connection string
+In Supabase, open your project → **Connect** (top of the page) → **Session pooler**, and copy the connection string. Replace `[YOUR-PASSWORD]` with your database password. Use the Session pooler, not "Direct connection": Render can't reach the direct one.
+
+### 3. Deploy on Render
 1. In Render, click **New → Blueprint**, connect GitHub, and pick the repository.
-2. Render reads `render.yaml` and sets everything up: Starter plan, a 1 GB disk, and a random `AUTH_SECRET`. Click **Apply**.
+2. Render reads `render.yaml` and sets everything up, including a random `AUTH_SECRET`. It asks you for `DATABASE_URL`: paste the Supabase string. Click **Apply**.
 3. Wait for the deploy to show **Live** (a few minutes).
 4. Open the service → **Environment** and copy the value of `AUTH_SECRET`. This is your password. Anyone who has it can read your WhatsApp, so don't share it.
 5. Note your service address at the top, e.g. `https://whatsapp-reader-mcp-abcd.onrender.com`.
 
-### 3. Link your WhatsApp
+### 4. Link your WhatsApp
 Open `https://YOUR-ADDRESS/link/YOUR_AUTH_SECRET` in a browser.
 
 - **On a computer:** scan the QR code with your phone (WhatsApp → Settings → Linked devices → Link a device).
@@ -29,7 +36,7 @@ Open `https://YOUR-ADDRESS/link/YOUR_AUTH_SECRET` in a browser.
 
 The page shows ✅ when it's linked. Leave it for 5–10 minutes so your older chat history can download.
 
-### 4. Add it to Claude
+### 5. Add it to Claude
 1. In Claude, go to **Settings → Connectors → Add custom connector**.
 2. Name: `WhatsApp`. URL: `https://YOUR-ADDRESS/mcp/YOUR_AUTH_SECRET`
 3. Save, then turn it on in a chat from the tools menu.
@@ -41,7 +48,7 @@ Then ask something like: *"Check my WhatsApp chat with Dani Eldas for tours in O
 - **Photos and voice notes** show up as `[image]`, `[audio]`, etc. Captions are saved.
 - **Your phone** needs to come online at least every couple of weeks, or WhatsApp unlinks the device.
 - **Times** are shown in Honduras time (`TIMEZONE` in Render's Environment tab, using names like `America/Chicago`).
-- **To stop:** unlink it in WhatsApp → Linked devices, then delete the service in Render.
+- **To stop:** unlink it in WhatsApp → Linked devices, delete the service in Render, and drop the `whatsapp` schema in Supabase.
 - **If WhatsApp updates and the link stops working:** update the `@whiskeysockets/baileys` version in `package.json` and redeploy.
 
 ## Tools Claude gets
