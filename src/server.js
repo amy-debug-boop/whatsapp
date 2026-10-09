@@ -249,6 +249,15 @@ async function waitForLinkReady(skip = null, timeoutMs = 20000) {
 
 async function startWhatsApp() {
   const { state, saveCreds } = await usePostgresAuthState();
+  // requestPairingCode saves your number as creds.me before the phone confirms. If that pairing never
+  // finished (no creds.account), Baileys would keep trying to log in as a linked device and WhatsApp
+  // rejects it before ever offering a QR or pairing code. Drop the half-finished pairing and start fresh.
+  if (state.creds.me && !state.creds.account) {
+    logger.warn('Clearing an unfinished pairing attempt');
+    delete state.creds.me;
+    delete state.creds.pairingCode;
+    await saveCreds();
+  }
   const config = {
     auth: { creds: state.creds, keys: makeCacheableSignalKeyStore(state.keys, logger) },
     logger,
@@ -282,6 +291,7 @@ async function startWhatsApp() {
     if (u.connection === 'close') {
       linkReady = false;
       const code = u.lastDisconnect?.error?.output?.statusCode;
+      logger.warn(`WhatsApp connection closed (${code ?? 'no code'}): ${u.lastDisconnect?.error?.message || ''}`);
       pairingCode = null;
       if (code === DisconnectReason.loggedOut) {
         status = 'logged_out';
